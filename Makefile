@@ -1,64 +1,81 @@
-# Makefile for Python project template
+# Makefile for WSE Indices Weights Loader
 
-.PHONY: help init-git devcontainer local-dev check-env test
+.PHONY: help install test run clean format lint dev tag-release
 
 help:
-	@echo "Available targets:"
+	@echo "WSE Indices Weights Loader - Available targets:"
 	@echo "  help           Show this help message"
-	@echo "  init-git       Remove old .git, init new repo"
-	@echo "  devcontainer   (Re)create VS Code dev container"
-	@echo "  local-dev      Run development locally (Python REPL)"
-	@echo "  check-env      Check Python version and uv presence"
-	@echo "  test          Run template tests"
+	@echo "  install        Install project dependencies"
+	@echo "  test           Run all tests"
+	@echo "  test-unit      Run unit tests only"
+	@echo "  test-integration Run integration tests only"
+	@echo "  run            Run the main application"
+	@echo "  clean          Clean up generated files"
+	@echo "  format         Format code with black"
+	@echo "  lint           Run linting checks"
+	@echo "  dev            Set up development environment"
+	@echo "  version        Show current version"
+	@echo "  tag-release    Create git tag for current version"
 
-init-git:
-	rm -rf .git
-	git init
-	git add .
-	git commit -m "Initial commit from template"
-	$(MAKE) ssh-refresh-known-hosts
+install:
+	@echo "Installing dependencies with uv..."
+	uv sync
 
-# Requires VS Code and Dev Containers extension
-# This will rebuild the container if using VS Code
-
-devcontainer:
-	@echo "To (re)create dev container, use VS Code:"
-	@echo "  Command Palette > Dev Containers: Rebuild Container"
-
-local-dev:
-	python -m src
+dev: install
+	@echo "Development environment ready!"
+	@echo "Run 'make test' to verify everything works"
 
 test:
-	@echo "Running template tests..."
-	@TEST_DIR="/tmp/setup-template-test-$$"; \
-	trap 'rm -rf "$$TEST_DIR"' EXIT; \
-	mkdir -p "$$TEST_DIR"; \
-	cp -r * "$$TEST_DIR/"; \
-	cd "$$TEST_DIR"; \
-	failed=0; \
-	for target in help check-env init-git local-dev; do \
-		echo "\n--- Running: make $$target ---"; \
-		if ! make $$target; then \
-			echo "Target $$target failed"; \
-			failed=1; \
-		fi; \
-	done; \
-	exit $$failed
+	@echo "Running all tests..."
+	uv run python -m pytest tests/ -v
 
-check-env:
-	@echo "Checking Python version..."
-	python3 --version
-	@echo "Checking for uv..."
-	@if command -v uv >/dev/null 2>&1; then \
-		echo "uv is installed."; \
-	else \
-		echo "uv is NOT installed. Install with: pip install uv"; \
-	fi
+test-unit:
+	@echo "Running unit tests..."
+	uv run python -m pytest tests/test_pdf_parser.py tests/test_pdf_downloader.py -v
 
-.PHONY: ssh-refresh-known-hosts
-ssh-refresh-known-hosts:
-	@echo "Refreshing github.com host keys"
-	@mkdir -p ~/.ssh && chmod 700 ~/.ssh
-	@touch ~/.ssh/known_hosts && chmod 644 ~/.ssh/known_hosts
-	@ssh-keygen -R github.com >/dev/null 2>&1 || true
-	@ssh-keyscan -H -t rsa,ecdsa,ed25519 github.com 2>/dev/null >> ~/.ssh/known_hosts
+test-integration:
+	@echo "Running integration tests..."
+	uv run python -m pytest tests/test_integration.py tests/test_pdf_parser_fixes.py -v
+
+run:
+	@echo "Running WSE Indices Weights Loader..."
+	uv run python src/__main__.py
+
+format:
+	@echo "Formatting code with black..."
+	uv run black src/ tests/
+
+lint:
+	@echo "Running linting checks..."
+	uv run python -m py_compile src/*.py
+	uv run python -m py_compile tests/*.py
+
+clean:
+	@echo "Cleaning up generated files..."
+	rm -rf __pycache__ src/__pycache__ tests/__pycache__
+	rm -rf .pytest_cache
+	rm -rf dist/ build/ *.egg-info/
+	rm -f downloads/*.pdf
+	rm -f output/*.csv output/*.xlsx output/*.json
+
+# Development helpers
+download-sample:
+	@echo "Downloading sample data for testing..."
+	uv run python -c "from src.pdf_downloader import PDFDownloader; PDFDownloader().download_for_date('2024_06_21')"
+
+parse-sample:
+	@echo "Parsing sample data..."
+	uv run python -c "from src.pdf_parser import PDFParser; parser = PDFParser(); stocks = parser.parse_pdf('downloads/2024_06_21_WIG.pdf'); parser.export_to_csv(stocks, 'output/sample_output.csv'); print(f'Parsed {len(stocks)} stocks')"
+
+# Version management
+version:
+	@echo "Current version: $$(grep '^version' pyproject.toml | cut -d'"' -f2)"
+
+tag-release:
+	@VERSION=$$(grep '^version' pyproject.toml | cut -d'"' -f2); \
+	echo "Tagging release v$$VERSION..."; \
+	git add .; \
+	git commit -m "Release v$$VERSION" || echo "No changes to commit"; \
+	git tag -a "v$$VERSION" -m "Release version $$VERSION"; \
+	echo "Tagged as v$$VERSION"; \
+	echo "To push the tag, run: git push origin v$$VERSION"
