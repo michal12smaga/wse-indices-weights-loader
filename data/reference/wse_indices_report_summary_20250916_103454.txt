@@ -1,0 +1,22 @@
+WSE Indices Weights Loader v0.2 - Summary Report
+=======================================================
+
+Generated: 2025-09-16 10:34:55
+Total Records: 2502
+Unique Companies: 356
+Indices Covered: 5
+Dates Covered: 5
+
+Indices:
+  MWIG40: 200 records
+  SWIG80: 400 records
+  WIG: 1652 records
+  WIG20: 100 records
+  WIG30: 150 records
+
+Dates (showing first 10 and last 10):
+  2023_06_16: 501 records
+  2023_09_15: 501 records
+  2023_12_15: 501 records
+  2024_03_15: 501 records
+  2024_06_21: 498 records

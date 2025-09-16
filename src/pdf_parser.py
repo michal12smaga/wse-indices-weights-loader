@@ -19,6 +19,8 @@ class StockRecord:
     price_pln: float
     number_of_shares: int
     share_percent: float
+    index_name: str  # New field for v0.2
+    date: str        # New field for v0.2
 
 
 class PDFParser:
@@ -38,14 +40,72 @@ class PDFParser:
         Returns:
             List of StockRecord objects
         """
+        # Extract index name and date from filename
+        self._extract_metadata_from_filename(pdf_path)
+
         records = []
 
         with pdfplumber.open(pdf_path) as pdf:
+            # Try to extract metadata from PDF content as well
+            if pdf.pages:
+                text = pdf.pages[0].extract_text()
+                if text:
+                    self._extract_metadata(text)
+
             for page_num, page in enumerate(pdf.pages):
                 page_records = self._parse_page(page, page_num)
                 records.extend(page_records)
 
         return records
+
+    def parse_multiple_pdfs(self, pdf_paths: List[str]) -> List[StockRecord]:
+        """
+        Parse multiple PDF files and extract stock records.
+
+        Args:
+            pdf_paths: List of paths to PDF files
+
+        Returns:
+            List of StockRecord objects from all PDFs
+        """
+        all_records = []
+
+        for pdf_path in pdf_paths:
+            print(f"Parsing: {pdf_path}")
+            try:
+                records = self.parse_pdf(pdf_path)
+                all_records.extend(records)
+                print(f"  Extracted {len(records)} records")
+            except Exception as e:
+                print(f"  Error parsing {pdf_path}: {e}")
+
+        return all_records
+
+    def _extract_metadata_from_filename(self, pdf_path: str):
+        """Extract index name and date from PDF filename."""
+        import os
+        filename = os.path.basename(pdf_path)
+
+        # Expected format: YYYY_MM_DD_INDEX.pdf (e.g., 2024_06_21_WIG.pdf)
+        match = re.match(r'(\d{4}_\d{2}_\d{2})_(.+)\.pdf', filename)
+        if match:
+            self.current_date = match.group(1)
+            self.current_index_name = match.group(2)
+        else:
+            # Fallback: try to extract any date and index patterns
+            date_match = re.search(r'(\d{4}_\d{2}_\d{2})', filename)
+            if date_match:
+                self.current_date = date_match.group(1)
+
+            # Common index names
+            index_patterns = [
+                r'\b(WIG[A-Z0-9-]*)\b', r'\b(mWIG\d+)\b', r'\b(sWIG\d+)\b'
+            ]
+            for pattern in index_patterns:
+                index_match = re.search(pattern, filename, re.IGNORECASE)
+                if index_match:
+                    self.current_index_name = index_match.group(1).upper()
+                    break
 
     def _parse_page(self, page, page_num: int) -> List[StockRecord]:
         """Parse a single page and extract stock records."""
@@ -263,7 +323,9 @@ class PDFParser:
                 company_name=company_name,
                 price_pln=price_pln,
                 number_of_shares=number_of_shares,
-                share_percent=share_percent
+                share_percent=share_percent,
+                index_name=self.current_index_name or "UNKNOWN",
+                date=self.current_date or "UNKNOWN"
             )
 
         except (ValueError, IndexError) as e:
@@ -386,6 +448,160 @@ class PDFParser:
             'has_missing_data': missing_data,
             'record_count': len(records)
         }
+
+    def export_to_csv(self, records: List[StockRecord], output_path: str):
+        """Export records to CSV file."""
+        df = pd.DataFrame([
+            {
+                'No': record.no,
+                'ISIN': record.isin,
+                'Company_Name': record.company_name,
+                'Price_PLN': record.price_pln,
+                'Number_of_Shares': record.number_of_shares,
+                'Share_Percent': record.share_percent,
+                'Index_Name': record.index_name,
+                'Date': record.date
+            }
+            for record in records
+        ])
+        df.to_csv(output_path, index=False)
+        print(f"Exported {len(records)} records to {output_path}")
+
+    def export_to_json(self, records: List[StockRecord], output_path: str):
+        """Export records to JSON file."""
+        import json
+
+        data = [
+            {
+                'no': record.no,
+                'isin': record.isin,
+                'company_name': record.company_name,
+                'price_pln': record.price_pln,
+                'number_of_shares': record.number_of_shares,
+                'share_percent': record.share_percent,
+                'index_name': record.index_name,
+                'date': record.date
+            }
+            for record in records
+        ]
+
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+        print(f"Exported {len(records)} records to {output_path}")
+
+    def export_to_multi_sheet_excel(self, records: List[StockRecord], output_path: str):
+        """
+        Export records to Excel with separate sheets per date.
+        For each date, create consolidated view with indices as columns.
+        """
+        if not records:
+            print("No records to export")
+            return
+
+        # Group records by date
+        records_by_date = {}
+        for record in records:
+            if record.date not in records_by_date:
+                records_by_date[record.date] = []
+            records_by_date[record.date].append(record)
+
+        with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+            for date, date_records in records_by_date.items():
+                # Create consolidated view for this date
+                consolidated_df = self._create_consolidated_view(date_records)
+
+                # Write to sheet named by date
+                # Excel doesn't like underscores in sheet names
+                sheet_name = date.replace('_', '-')
+                consolidated_df.to_excel(
+                    writer, sheet_name=sheet_name, index=False)
+
+                print(
+                    f"Added sheet '{sheet_name}' with {len(consolidated_df)} consolidated records")
+
+        print(f"Exported multi-sheet Excel to {output_path}")
+
+    def _create_consolidated_view(self, records: List[StockRecord]) -> pd.DataFrame:
+        """
+        Create consolidated view using WIG as base with other indices as additional columns.
+        """
+        # Group records by index
+        records_by_index = {}
+        for record in records:
+            if record.index_name not in records_by_index:
+                records_by_index[record.index_name] = []
+            records_by_index[record.index_name].append(record)
+
+        # Start with WIG as the base (if available), otherwise use the first index
+        base_index = "WIG" if "WIG" in records_by_index else list(
+            records_by_index.keys())[0]
+        base_records = records_by_index[base_index]
+
+        # Create base DataFrame with ISIN and Company_Name
+        data = []
+        for record in base_records:
+            row = {
+                'ISIN': record.isin,
+                'Company_Name': record.company_name,
+                f'{base_index}_No': record.no,
+                f'{base_index}_Price_PLN': record.price_pln,
+                f'{base_index}_Number_of_Shares': record.number_of_shares,
+                f'{base_index}_Share_Percent': record.share_percent
+            }
+            data.append(row)
+
+        df = pd.DataFrame(data)
+
+        # Add other indices as additional columns
+        for index_name, index_records in records_by_index.items():
+            if index_name == base_index:
+                continue
+
+            # Create mapping from ISIN to record for this index
+            isin_to_record = {record.isin: record for record in index_records}
+
+            # Add columns for this index
+            df[f'{index_name}_No'] = df['ISIN'].map(
+                lambda isin: isin_to_record[isin].no if isin in isin_to_record else None)
+            df[f'{index_name}_Price_PLN'] = df['ISIN'].map(
+                lambda isin: isin_to_record[isin].price_pln if isin in isin_to_record else None)
+            df[f'{index_name}_Number_of_Shares'] = df['ISIN'].map(
+                lambda isin: isin_to_record[isin].number_of_shares if isin in isin_to_record else None)
+            df[f'{index_name}_Share_Percent'] = df['ISIN'].map(
+                lambda isin: isin_to_record[isin].share_percent if isin in isin_to_record else None)
+
+        return df
+
+    def validate_share_percentages_by_index(self, records: List[StockRecord]) -> Dict[str, Dict[str, Any]]:
+        """
+        Validate that each index's share percentages sum to ~100% for each date.
+
+        Returns:
+            Dict mapping index names to validation results
+        """
+        validation_results = {}
+
+        # Group by index and date
+        by_index_date = {}
+        for record in records:
+            key = (record.index_name, record.date)
+            if key not in by_index_date:
+                by_index_date[key] = []
+            by_index_date[key].append(record)
+
+        # Validate each index-date combination
+        for (index_name, date), index_records in by_index_date.items():
+            validation = self.validate_data(index_records)
+
+            key = f"{index_name}_{date}"
+            validation_results[key] = {
+                'index_name': index_name,
+                'date': date,
+                'validation': validation
+            }
+
+        return validation_results
 
 
 if __name__ == "__main__":

@@ -1,0 +1,84 @@
+WSE Indices Complete Historical Dataset - Summary
+=======================================================
+
+Generated: 2025-09-16 10:46:19
+Dataset Version: 20250916
+
+OVERVIEW
+--------------------
+Total Records: 29,378
+Unique Companies (ISINs): 669
+Indices Covered: 6
+Dates Covered: 68
+Date Range: 2007_03_16 to 2024_06_21
+
+INDICES COVERAGE
+--------------------
+MWIG40:
+  Records: 2,720
+  Dates: 68
+  Companies: 153
+
+SWIG80:
+  Records: 5,193
+  Dates: 65
+  Companies: 344
+
+SWIG80*:
+  Records: 240
+  Dates: 3
+  Companies: 90
+
+WIG:
+  Records: 18,636
+  Dates: 52
+  Companies: 665
+
+WIG20:
+  Records: 1,283
+  Dates: 68
+  Companies: 49
+
+WIG30:
+  Records: 1,306
+  Dates: 44
+  Companies: 49
+
+TEMPORAL COVERAGE
+--------------------
+First Date: 2007_03_16
+Latest Date: 2024_06_21
+Total Trading Days: 68
+
+First 10 Dates:
+  2007_03_16: 407 records (4 indices)
+  2007_06_15: 140 records (3 indices)
+  2007_09_21: 140 records (3 indices)
+  2007_12_21: 140 records (3 indices)
+  2008_03_20: 140 records (3 indices)
+  2008_06_20: 140 records (3 indices)
+  2008_09_19: 139 records (3 indices)
+  2008_12_19: 133 records (3 indices)
+  2009_03_20: 134 records (3 indices)
+  2009_06_19: 136 records (3 indices)
+
+  ... (48 dates omitted) ...
+
+Last 10 Dates:
+  2022_03_18: 516 records (5 indices)
+  2022_06_17: 513 records (5 indices)
+  2022_09_16: 504 records (5 indices)
+  2022_12_16: 496 records (5 indices)
+  2023_03_17: 505 records (5 indices)
+  2023_06_16: 501 records (5 indices)
+  2023_09_15: 501 records (5 indices)
+  2023_12_15: 501 records (5 indices)
+  2024_03_15: 501 records (5 indices)
+  2024_06_21: 498 records (5 indices)
+
+FILE FORMATS
+--------------------
+SQLite Database: wse_complete_historical_20250916.sqlite (recommended for analysis)
+Excel Multi-sheet: wse_complete_historical_20250916.xlsx (human-readable)
+CSV Complete: wse_complete_historical_20250916.csv (universal compatibility)
+JSON Complete: wse_complete_historical_20250916.json (API integration)
