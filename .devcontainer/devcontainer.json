@@ -1,0 +1,82 @@
+{
+  // Name that appears in VS Code UI
+  "name": "Python Dev Container",
+  // Base Image Options (choose one by uncommenting):
+  // Option 1: Use pre-built image
+  // - mcr.microsoft.com/devcontainers/python:3.11    (Latest Python 3.11)
+  // - mcr.microsoft.com/devcontainers/python:3-bullseye    (Debian-based)
+  // - mcr.microsoft.com/devcontainers/python:3-alpine    (Alpine-based, smaller)
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  // Option 2: Build from Dockerfile
+  // "build": {
+  //   "dockerfile": "Dockerfile",
+  //   "context": ".."
+  // },
+  // Features to add to the dev container
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "configureZshAsDefaultShell": true,
+      "username": "vscode"
+    },
+    "ghcr.io/devcontainers/features/git:1": {
+      "version": "latest",
+      "ppa": false
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": false
+    },
+    "ghcr.io/devcontainers-extra/features/pre-commit:2": {}
+  },
+  // VS Code specific settings
+  "customizations": {
+    "vscode": {
+      // VS Code settings
+      "settings": {
+        "python.defaultInterpreterPath": "${containerWorkspaceFolder}/.venv/bin/python",
+        "python.testing.pytestEnabled": true,
+        "editor.formatOnSave": true,
+        "editor.rulers": [
+          80,
+          100
+        ]
+      },
+      // Recommended extensions
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "github.copilot",
+        "eamodio.gitlens",
+        "streetsidesoftware.code-spell-checker",
+        "visualstudioexptteam.vscodeintellicode",
+        "ms-python.black-formatter",
+        "ms-azuretools.vscode-docker",
+        "ms-python.pylint",
+        "njpwerner.autodocstring"
+      ]
+    }
+  },
+  // Container specific settings
+  "remoteUser": "vscode", // The user to run as
+  "mounts": [
+    // Persist dependencies between container rebuilds
+    "source=${localWorkspaceFolderBasename}-venv,target=${containerWorkspaceFolder}/.venv,type=volume,consistency=delegated"
+  ],
+  // Set default shell for command execution
+  "postStartCommand": "echo 'Container started'",
+  "postCreateCommand": "set -euo pipefail && echo '=== Setting up SSH directory ===' && sudo chown -R vscode:vscode /home/vscode && mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/known_hosts && (ssh-keygen -F github.com >/dev/null || ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts) && chmod 644 ~/.ssh/known_hosts && echo '=== Ensuring uv is installed ===' && export PATH=$HOME/.local/bin:$PATH && (command -v uv >/dev/null 2>&1 || (curl -LsSf https://astral.sh/uv/install.sh | sh)) && export PATH=$HOME/.local/bin:$PATH && echo '=== Preparing .venv directory and permissions ===' && mkdir -p ${containerWorkspaceFolder}/.venv && sudo chown -R vscode:vscode ${containerWorkspaceFolder}/.venv && echo '=== Setting up Python environment ===' && if [ ! -x .venv/bin/python ]; then uv venv --python /usr/local/bin/python; fi && uv pip install -e . && uv export --group dev --no-hashes -o /tmp/requirements-dev.txt && uv pip install -r /tmp/requirements-dev.txt",
+  // Container environment variables
+  "remoteEnv": {
+    "PYTHONPATH": "${containerWorkspaceFolder}",
+    "VIRTUAL_ENV": "${containerWorkspaceFolder}/.venv",
+    "PATH": "${containerWorkspaceFolder}/.venv/bin:${env:HOME}/.local/bin:${env:PATH}"
+  },
+  // Port forwarding
+  "forwardPorts": [
+    // 8000  // Uncomment if you need to expose ports
+  ],
+  // Use 'postStartCommand' to run commands each time the container starts
+  // "postStartCommand": "echo 'Container started'",
+  // Increase timeout for slower operations
+  "waitFor": "postCreateCommand"
+}

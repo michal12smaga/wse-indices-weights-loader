@@ -1,0 +1,14 @@
+[project]
+name = "python-template"
+version = "0.1.0"
+description = "A template for new Python projects with dev container support."
+authors = [{ name = "Stefan Konopnicki", email = "stefan.konopnicki@gmail.com" }]
+dependencies = [
+  "prettyconf",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "black~=24.0",
+]
