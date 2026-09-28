@@ -592,12 +592,29 @@ def main():
     for seg in SPLITS:
         report["benchmark"][seg] = metrics(segment(benchmark, seg))
 
+    suspect_tickers = sorted({
+        x["ticker"] for x in data_audit.get("largest_abs_daily_returns", [])
+        if abs(x.get("return", 0.0)) > 1.0
+    })
+    close_no_outliers = close.drop(columns=suspect_tickers, errors="ignore")
+    volume_no_outliers = volume.drop(columns=suspect_tickers, errors="ignore")
+    report["data_integrity"]["suspect_tickers_abs_return_gt_100pct"] = suspect_tickers
+
     for name, (kind, kw) in specs.items():
         targets, runs, ex = run_strategy(name, kind, close, volume, universe, **kw)
         base = runs[1.0]
         all_returns[name] = base
+        clean_targets, clean_runs, _ = run_strategy(
+            name + "_exclude_outliers", kind, close_no_outliers, volume_no_outliers, universe, **kw
+        )
         st = {
             "target_rebalances": len(targets),
+            "outlier_exclusion": {
+                "excluded_tickers": suspect_tickers,
+                "target_rebalances": len(clean_targets),
+                "oos": metrics(segment(clean_runs[1.0], "oos"), segment(benchmark, "oos")),
+                "oos_2x_cost": metrics(segment(clean_runs[2.0], "oos"), segment(benchmark, "oos")),
+            },
             "execution_stats": ex[1.0],
             "full": metrics(base, benchmark),
             "train": metrics(segment(base, "train"), segment(benchmark, "train")),
