@@ -147,6 +147,8 @@ def build_targets(
     sma: int = 200,
     rev_lb: int = 5,
     vol_win: int = 120,
+    adv_min: float = BASE_ADV_MIN,
+    execution_delay: int = 1,
 ) -> dict[pd.Timestamp, Target]:
     dates = month_ends(close.loc[START:END].index)
     if kind == "reversal":
@@ -157,9 +159,9 @@ def build_targets(
 
     for sig in dates:
         pos = all_dates.get_indexer([sig])[0]
-        if pos < 0 or pos + 1 >= len(all_dates):
+        if pos < 0 or pos + execution_delay >= len(all_dates):
             continue
-        exec_date = all_dates[pos + 1]
+        exec_date = all_dates[pos + execution_delay]
         members = latest_snapshot_members(universe, sig)
         if not members:
             continue
@@ -177,7 +179,7 @@ def build_targets(
         rates = cost_rate_from_adv(adv)
         eligible = (
             px.notna()
-            & (adv >= BASE_ADV_MIN)
+            & (adv >= adv_min)
             & rates.notna()
             & (hist.tail(60).notna().mean(axis=0) >= 0.90)
         )
@@ -398,9 +400,9 @@ def metrics(r: pd.Series, bench: pd.Series | None = None) -> dict:
             beta = np.nan
         active = r - b
         irden = active.std(ddof=1) * math.sqrt(TRADING_DAYS)
-        out["beta_vs_wig20"] = beta
-        out["alpha_ann_vs_wig20"] = float((r.mean() - beta * b.mean()) * TRADING_DAYS) if np.isfinite(beta) else np.nan
-        out["information_ratio_vs_wig20"] = float(active.mean() * TRADING_DAYS / irden) if irden > 0 else np.nan
+        out["beta_vs_benchmark"] = beta
+        out["alpha_ann_vs_benchmark"] = float((r.mean() - beta * b.mean()) * TRADING_DAYS) if np.isfinite(beta) else np.nan
+        out["information_ratio_vs_benchmark"] = float(active.mean() * TRADING_DAYS / irden) if irden > 0 else np.nan
     return out
 
 
@@ -543,9 +545,11 @@ def main():
     universe, universe_names = load_universe()
     close, open_, volume, data_audit = load_prices(universe_names)
 
-    if "WIG20" not in close.columns:
-        raise RuntimeError("WIG20 benchmark missing from archive")
-    benchmark = close["WIG20"].pct_change(fill_method=None).loc[START:END].fillna(0)
+    if "WIG" not in close.columns or "WIG20" not in close.columns:
+        raise RuntimeError("WIG/WIG20 benchmark missing from archive")
+    # WIG is a total-return broad-market index; use it as the primary benchmark.
+    benchmark = close["WIG"].pct_change(fill_method=None).loc[START:END].fillna(0)
+    benchmark_wig20_price = close["WIG20"].pct_change(fill_method=None).loc[START:END].fillna(0)
 
     specs = {
         "momentum_12_1": ("momentum", {"mom_lb": 252, "skip": 21}),
@@ -562,8 +566,8 @@ def main():
         "research_design": {
             "sample": [str(START.date()), str(END.date())],
             "splits": SPLITS,
-            "execution": "signal at close t; rebalance at close t+1; new holdings earn returns from t+2 close-to-close",
-            "liquidity_filter": f"60-session median PLN turnover >= {BASE_ADV_MIN:,.0f}",
+            "execution": "signal at close t; baseline rebalance at close t+1; new holdings earn returns from the next close-to-close interval",
+            "liquidity_filter": f"baseline 60-session median PLN turnover >= {BASE_ADV_MIN:,.0f}; stressed at 3m and 10m PLN",
             "cost_model": {
                 ">=50m_ADV": "25 bps one-way",
                 "10-50m_ADV": "35 bps",
@@ -583,14 +587,16 @@ def main():
             "snapshot_last": str(universe["date"].max().date()),
             "price_tickers_matching_any_wig_name": int(len(set(close.columns) & universe_names)),
         },
-        "benchmark": {},
+        "benchmark": {"primary": "WIG_total_return", "secondary": "WIG20_price"},
         "strategies": {},
         "parameter_robustness": {},
     }
 
-    report["benchmark"]["full"] = metrics(benchmark)
+    report["benchmark"]["wig_total_return"] = {"full": metrics(benchmark)}
+    report["benchmark"]["wig20_price"] = {"full": metrics(benchmark_wig20_price)}
     for seg in SPLITS:
-        report["benchmark"][seg] = metrics(segment(benchmark, seg))
+        report["benchmark"]["wig_total_return"][seg] = metrics(segment(benchmark, seg))
+        report["benchmark"]["wig20_price"][seg] = metrics(segment(benchmark_wig20_price, seg))
 
     suspect_tickers = sorted({
         x["ticker"] for x in data_audit.get("largest_abs_daily_returns", [])
@@ -650,6 +656,26 @@ def main():
             ("lv_60", "lowvol", {"vol_win": 60}),
             ("lv_120", "lowvol", {"vol_win": 120}),
             ("lv_180", "lowvol", {"vol_win": 180}),
+        ],
+        "trend_liquidity": [
+            ("trend_adv1m", "trend", {"mom_lb": 252, "sma": 200, "adv_min": 1_000_000}),
+            ("trend_adv3m", "trend", {"mom_lb": 252, "sma": 200, "adv_min": 3_000_000}),
+            ("trend_adv10m", "trend", {"mom_lb": 252, "sma": 200, "adv_min": 10_000_000}),
+        ],
+        "momlowvol_liquidity": [
+            ("mlv_adv1m", "mom_lowvol", {"mom_lb": 252, "skip": 21, "vol_win": 120, "adv_min": 1_000_000}),
+            ("mlv_adv3m", "mom_lowvol", {"mom_lb": 252, "skip": 21, "vol_win": 120, "adv_min": 3_000_000}),
+            ("mlv_adv10m", "mom_lowvol", {"mom_lb": 252, "skip": 21, "vol_win": 120, "adv_min": 10_000_000}),
+        ],
+        "trend_execution_delay": [
+            ("trend_delay1", "trend", {"mom_lb": 252, "sma": 200, "execution_delay": 1}),
+            ("trend_delay2", "trend", {"mom_lb": 252, "sma": 200, "execution_delay": 2}),
+            ("trend_delay3", "trend", {"mom_lb": 252, "sma": 200, "execution_delay": 3}),
+        ],
+        "momlowvol_execution_delay": [
+            ("mlv_delay1", "mom_lowvol", {"mom_lb": 252, "skip": 21, "vol_win": 120, "execution_delay": 1}),
+            ("mlv_delay2", "mom_lowvol", {"mom_lb": 252, "skip": 21, "vol_win": 120, "execution_delay": 2}),
+            ("mlv_delay3", "mom_lowvol", {"mom_lb": 252, "skip": 21, "vol_win": 120, "execution_delay": 3}),
         ],
     }
     for family, variants in robustness.items():
@@ -729,13 +755,14 @@ def main():
                 "strategy": name, "segment": seg, "status": st.get("status"),
                 "cagr": m.get("cagr"), "sharpe": m.get("sharpe"), "sortino": m.get("sortino"),
                 "max_drawdown": m.get("max_drawdown"), "ann_vol": m.get("ann_vol"),
-                "calmar": m.get("calmar"), "beta_vs_wig20": m.get("beta_vs_wig20"),
+                "calmar": m.get("calmar"), "beta_vs_wig_total_return": m.get("beta_vs_benchmark"),
             })
     pd.DataFrame(rows).to_csv(outdir / "strategy_metrics.csv", index=False)
 
     # Equity curves (base costs)
     eq = pd.DataFrame({n: (1 + r.loc[START:END].fillna(0)).cumprod() for n, r in all_returns.items()})
-    eq["WIG20"] = (1 + benchmark).cumprod()
+    eq["WIG_total_return"] = (1 + benchmark).cumprod()
+    eq["WIG20_price"] = (1 + benchmark_wig20_price).cumprod()
     eq.to_csv(outdir / "equity_curves.csv")
 
     # Human-readable concise report.
@@ -761,7 +788,7 @@ def main():
         "",
         "## Key limitations",
         "- Historical WIG membership is point-in-time by available GPW Benchmark snapshots, but snapshots are not daily.",
-        "- OHLCV archive has no explicit adjusted-close/dividend field; strategy returns are price-return based.",
+        "- Stock OHLCV has no explicit adjusted-close/dividend field, so strategy legs are price-return based; the primary WIG benchmark is total-return, making relative comparisons conservative with respect to dividends.",
         "- Delisting terminal returns are unavailable; a conservative -30% penalty is applied after 5 consecutive missing sessions while held.",
         "- Execution is next-close, not same-close. Spread/slippage uses ADV buckets and is stress-tested at 1x/1.5x/2x/3x.",
         "- Results end on 2024-01-24 because that is the terminal date of the mirrored Bossa archive used here.",
