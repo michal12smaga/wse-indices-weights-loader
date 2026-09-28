@@ -1,0 +1,133 @@
+name: Build GPW research dataset
+
+on:
+  push:
+    branches: [chatgpt-gpw-research]
+    paths:
+      - ".github/workflows/gpw-data.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt-gpw-research
+
+      - name: Download public GPW archive
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p .cache/gpw
+          curl -L --fail --retry 3             https://raw.githubusercontent.com/MxWisnie/PortfolioOpt/main/data/mstall.zip             -o .cache/gpw/mstall.zip
+          unzip -t .cache/gpw/mstall.zip | tail -5
+
+      - name: Parse and split OHLCV by year
+        shell: bash
+        run: |
+          python - <<'PY'
+          import csv, io, json, os, zipfile
+          from collections import defaultdict
+          from datetime import datetime
+          from pathlib import Path
+
+          archive = Path(".cache/gpw/mstall.zip")
+          outdir = Path("research_data/gpw_ohlcv")
+          outdir.mkdir(parents=True, exist_ok=True)
+
+          rows_by_year = defaultdict(list)
+          file_stats = []
+          bad_files = []
+
+          with zipfile.ZipFile(archive) as z:
+              mst_files = [n for n in z.namelist() if n.lower().endswith(".mst")]
+              for name in mst_files:
+                  ticker = Path(name).stem.upper()
+                  try:
+                      raw = z.read(name)
+                      text = raw.decode("utf-8-sig", errors="replace")
+                      sample = text[:4096]
+                      delim = ";" if sample.count(";") > sample.count(",") else ","
+                      reader = csv.reader(io.StringIO(text), delimiter=delim)
+                      data = list(reader)
+                      if not data:
+                          continue
+                      header = [x.strip() for x in data[0]]
+                      idx = {h: i for i, h in enumerate(header)}
+                      date_key = "<DTYYYYMMDD>" if "<DTYYYYMMDD>" in idx else ("<DATE>" if "<DATE>" in idx else None)
+                      needed = ["<OPEN>","<HIGH>","<LOW>","<CLOSE>","<VOL>"]
+                      if date_key is None or any(k not in idx for k in needed):
+                          bad_files.append({"file": name, "header": header[:12]})
+                          continue
+                      first_date = None
+                      last_date = None
+                      nrows = 0
+                      for r in data[1:]:
+                          try:
+                              ds = r[idx[date_key]].strip()
+                              if not ds:
+                                  continue
+                              ds = ds.replace("-","").replace(".","")
+                              if len(ds) != 8 or not ds.isdigit():
+                                  continue
+                              dt = datetime.strptime(ds, "%Y%m%d")
+                              vals = [r[idx[k]].strip() for k in needed]
+                              if any(v == "" for v in vals[:4]):
+                                  continue
+                              row = [ticker, dt.strftime("%Y-%m-%d"), *vals]
+                              rows_by_year[dt.year].append(row)
+                              first_date = dt if first_date is None or dt < first_date else first_date
+                              last_date = dt if last_date is None or dt > last_date else last_date
+                              nrows += 1
+                          except Exception:
+                              continue
+                      file_stats.append({
+                          "ticker": ticker,
+                          "rows": nrows,
+                          "first_date": first_date.strftime("%Y-%m-%d") if first_date else None,
+                          "last_date": last_date.strftime("%Y-%m-%d") if last_date else None,
+                      })
+                  except Exception as e:
+                      bad_files.append({"file": name, "error": repr(e)})
+
+          header = ["ticker","date","open","high","low","close","volume"]
+          for year, rows in sorted(rows_by_year.items()):
+              rows.sort(key=lambda x: (x[1], x[0]))
+              with open(outdir / f"{year}.csv", "w", newline="", encoding="utf-8") as f:
+                  w = csv.writer(f)
+                  w.writerow(header)
+                  w.writerows(rows)
+
+          valid_stats = [x for x in file_stats if x["rows"] > 0]
+          audit = {
+              "source": "https://raw.githubusercontent.com/MxWisnie/PortfolioOpt/main/data/mstall.zip",
+              "archive_bytes": archive.stat().st_size,
+              "mst_files_total": len(file_stats) + len(bad_files),
+              "parsed_files": len(valid_stats),
+              "bad_files_count": len(bad_files),
+              "years": {str(y): len(rows_by_year[y]) for y in sorted(rows_by_year)},
+              "global_first_date": min((x["first_date"] for x in valid_stats if x["first_date"]), default=None),
+              "global_last_date": max((x["last_date"] for x in valid_stats if x["last_date"]), default=None),
+              "tickers_with_data": len(valid_stats),
+              "largest_files": sorted(valid_stats, key=lambda x: x["rows"], reverse=True)[:30],
+              "bad_files_sample": bad_files[:20],
+          }
+          Path("research_data").mkdir(exist_ok=True)
+          with open("research_data/gpw_data_audit.json", "w", encoding="utf-8") as f:
+              json.dump(audit, f, indent=2, ensure_ascii=False)
+          print(json.dumps(audit, indent=2, ensure_ascii=False))
+          PY
+
+      - name: Commit research dataset
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name "chatgpt-research-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add research_data/
+          git commit -m "research: add historical GPW OHLCV dataset" || exit 0
+          git push origin HEAD:chatgpt-gpw-research
