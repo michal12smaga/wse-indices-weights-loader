@@ -14,7 +14,7 @@ Final OOS: 2019-01-01 to 2024-01-24
 
 ## Key limitations
 - Historical WIG membership is point-in-time by available GPW Benchmark snapshots, but snapshots are not daily.
-- OHLCV archive has no explicit adjusted-close/dividend field; strategy returns are price-return based.
+- Stock OHLCV has no explicit adjusted-close/dividend field, so strategy legs are price-return based; the primary WIG benchmark is total-return, making relative comparisons conservative with respect to dividends.
 - Delisting terminal returns are unavailable; a conservative -30% penalty is applied after 5 consecutive missing sessions while held.
 - Execution is next-close, not same-close. Spread/slippage uses ADV buckets and is stress-tested at 1x/1.5x/2x/3x.
 - Results end on 2024-01-24 because that is the terminal date of the mirrored Bossa archive used here.
