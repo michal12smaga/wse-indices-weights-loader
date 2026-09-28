@@ -1,0 +1,28 @@
+name: Probe Stooq GPW CSV
+
+on:
+  push:
+    branches: [chatgpt-gpw-research]
+    paths:
+      - ".github/workflows/probe-stooq.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe Stooq daily CSV
+        shell: bash
+        run: |
+          set -euxo pipefail
+          for sym in wig pko kgh; do
+            url="https://stooq.pl/q/d/l/?s=${sym}.pl&i=d&d1=20240125&d2=20260928"
+            echo "URL=$url"
+            curl -L --fail --max-time 30 --retry 2 -A "Mozilla/5.0" "$url" -o "/tmp/${sym}.csv"
+            file "/tmp/${sym}.csv"
+            wc -c "/tmp/${sym}.csv"
+            head -5 "/tmp/${sym}.csv"
+            tail -5 "/tmp/${sym}.csv"
+          done
