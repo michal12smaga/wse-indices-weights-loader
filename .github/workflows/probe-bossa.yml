@@ -1,0 +1,57 @@
+name: Probe current Bossa GPW archive
+
+on:
+  push:
+    branches: [chatgpt-gpw-research]
+    paths:
+      - ".github/workflows/probe-bossa.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe official Bossa archive
+        shell: bash
+        run: |
+          set -euxo pipefail
+          for url in             "https://bossa.pl/pub/metastock/mstock/mstall.zip"             "http://bossa.pl/pub/metastock/mstock/mstall.zip"; do
+            echo "TRY=$url"
+            if curl -L --fail --max-time 30 --retry 2 "$url" -o /tmp/mstall.zip; then
+              echo "SUCCESS=$url"
+              ls -lh /tmp/mstall.zip
+              unzip -t /tmp/mstall.zip | tail -5
+              python - <<'PY'
+          import csv, io, zipfile
+          from datetime import datetime
+          z=zipfile.ZipFile("/tmp/mstall.zip")
+          first=None; last=None; files=0; rows=0
+          for n in z.namelist():
+              if not n.lower().endswith(".mst"): continue
+              files+=1
+              txt=z.read(n).decode("utf-8-sig",errors="replace")
+              delim=";" if txt[:4096].count(";")>txt[:4096].count(",") else ","
+              rr=list(csv.reader(io.StringIO(txt),delimiter=delim))
+              if not rr: continue
+              h={v.strip():i for i,v in enumerate(rr[0])}
+              dk="<DTYYYYMMDD>" if "<DTYYYYMMDD>" in h else ("<DATE>" if "<DATE>" in h else None)
+              if not dk: continue
+              for r in rr[1:]:
+                  try:
+                      ds=r[h[dk]].strip().replace("-","").replace(".","")
+                      if len(ds)!=8 or not ds.isdigit(): continue
+                      d=datetime.strptime(ds,"%Y%m%d").date()
+                      rows+=1
+                      first=d if first is None or d<first else first
+                      last=d if last is None or d>last else last
+                  except Exception:
+                      pass
+          print({"files":files,"rows":rows,"first":str(first),"last":str(last)})
+          PY
+              exit 0
+            fi
+          done
+          echo "OFFICIAL_BOSSA_ARCHIVE_UNAVAILABLE"
+          exit 1
