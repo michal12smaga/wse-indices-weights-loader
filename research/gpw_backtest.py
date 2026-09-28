@@ -149,6 +149,7 @@ def build_targets(
     vol_win: int = 120,
     adv_min: float = BASE_ADV_MIN,
     execution_delay: int = 1,
+    max_positions: int | None = None,
 ) -> dict[pd.Timestamp, Target]:
     dates = month_ends(close.loc[START:END].index)
     if kind == "reversal":
@@ -218,7 +219,10 @@ def build_targets(
             ma = hist[cols_e].tail(sma).mean()
             mom = hist[cols_e].iloc[-1] / hist[cols_e].iloc[-1 - mom_lb] - 1.0
             mask = (hist[cols_e].iloc[-1] > ma) & (mom > 0)
-            chosen = list(mask[mask].index)
+            trend_scores = mom[mask].dropna().sort_values(ascending=False)
+            if max_positions is not None:
+                trend_scores = trend_scores.head(max_positions)
+            chosen = list(trend_scores.index)
 
         elif kind == "lowvol":
             rv = hist[cols_e].pct_change(fill_method=None).tail(vol_win).std()
@@ -538,6 +542,18 @@ def run_strategy(name: str, kind: str, close, volume, universe, **kwargs):
     return targets, runs, execstats
 
 
+def target_holding_stats(targets: dict[pd.Timestamp, Target]) -> dict:
+    counts = np.array([len(t.weights) for t in targets.values()], dtype=float)
+    if len(counts) == 0:
+        return {"mean": 0.0, "median": 0.0, "min": 0, "max": 0}
+    return {
+        "mean": float(counts.mean()),
+        "median": float(np.median(counts)),
+        "min": int(counts.min()),
+        "max": int(counts.max()),
+    }
+
+
 def main():
     outdir = Path("research_results")
     outdir.mkdir(exist_ok=True)
@@ -685,6 +701,29 @@ def main():
             m = metrics(segment(runs[1.0], "oos"), segment(benchmark, "oos"))
             arr.append({"variant": vname, **m})
         report["parameter_robustness"][family] = arr
+
+    # Separate capital-constrained implementation experiment for a PLN 10k starting account.
+    # This is deliberately reported as a NEW variant rather than silently changing the baseline strategy.
+    report["capital_10k_experiment"] = {
+        "starting_capital_pln": 10_000,
+        "selection_rule": "SMA200 + positive 12M return; among qualifiers rank by 12M return and hold top N equal-weight",
+        "note": "Fractional portfolio accounting is still used; whole-share rounding and broker-specific minimum commissions are not yet modeled.",
+        "variants": [],
+    }
+    for npos in [5, 8, 10]:
+        t, runs, ex = run_strategy(
+            f"trend_top{npos}", "trend", close, volume, universe,
+            mom_lb=252, sma=200, max_positions=npos
+        )
+        report["capital_10k_experiment"]["variants"].append({
+            "max_positions": npos,
+            "target_position_pln_at_start": 10_000 / npos,
+            "holding_stats": target_holding_stats(t),
+            "oos": metrics(segment(runs[1.0], "oos"), segment(benchmark, "oos")),
+            "oos_2x_cost": metrics(segment(runs[2.0], "oos"), segment(benchmark, "oos")),
+            "execution_stats": ex[1.0],
+            "concentration_stress_oos": concentration_stress(segment(runs[1.0], "oos")),
+        })
 
     # Correlations, drawdown correlations, and equal-weight strategy portfolio for non-benchmark strategies.
     strat_names = [x for x in specs if x != "equal_weight_wig"]
