@@ -1,0 +1,229 @@
+{
+  "source": "https://raw.githubusercontent.com/MxWisnie/PortfolioOpt/main/data/mstall.zip",
+  "archive_bytes": 29609075,
+  "mst_files_total": 3238,
+  "parsed_files": 3238,
+  "bad_files_count": 0,
+  "years": {
+    "1991": 86,
+    "1992": 361,
+    "1993": 965,
+    "1994": 2539,
+    "1995": 5171,
+    "1996": 7028,
+    "1997": 11155,
+    "1998": 18201,
+    "1999": 21705,
+    "2000": 23442,
+    "2001": 24274,
+    "2002": 22661,
+    "2003": 24153,
+    "2004": 27842,
+    "2005": 33811,
+    "2006": 38442,
+    "2007": 46182,
+    "2008": 60453,
+    "2009": 68845,
+    "2010": 78849,
+    "2011": 95321,
+    "2012": 103501,
+    "2013": 113041,
+    "2014": 121513,
+    "2015": 127867,
+    "2016": 135771,
+    "2017": 140118,
+    "2018": 138630,
+    "2019": 145878,
+    "2020": 179276,
+    "2021": 208390,
+    "2022": 232420,
+    "2023": 260923,
+    "2024": 19902
+  },
+  "global_first_date": "1991-04-16",
+  "global_last_date": "2024-01-24",
+  "tickers_with_data": 3238,
+  "largest_files": [
+    {
+      "ticker": "WIG",
+      "rows": 7749,
+      "first_date": "1991-04-16",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "WIG-POLAND",
+      "rows": 7748,
+      "first_date": "1991-04-16",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "MILLENNIUM",
+      "rows": 7637,
+      "first_date": "1992-08-13",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "MBANK",
+      "rows": 7634,
+      "first_date": "1992-10-06",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "SANPL",
+      "rows": 7531,
+      "first_date": "1993-06-22",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "VRG",
+      "rows": 7493,
+      "first_date": "1993-09-30",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "INGBSK",
+      "rows": 7450,
+      "first_date": "1994-01-25",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "MOSTALWAR",
+      "rows": 7437,
+      "first_date": "1993-10-14",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "WIG20",
+      "rows": 7417,
+      "first_date": "1994-04-14",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "RAFAKO",
+      "rows": 7414,
+      "first_date": "1994-03-07",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "CDPROJEKT",
+      "rows": 7325,
+      "first_date": "1994-08-02",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "MOSTALZAB",
+      "rows": 7321,
+      "first_date": "1994-10-05",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "STALEXP",
+      "rows": 7316,
+      "first_date": "1994-10-26",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "ZYWIEC",
+      "rows": 7288,
+      "first_date": "1991-09-24",
+      "last_date": "2023-01-13"
+    },
+    {
+      "ticker": "SWIG80",
+      "rows": 7274,
+      "first_date": "1994-12-29",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "PROCHEM",
+      "rows": 7233,
+      "first_date": "1994-06-30",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "DEBICA",
+      "rows": 7231,
+      "first_date": "1994-11-24",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "BUDIMEX",
+      "rows": 7173,
+      "first_date": "1995-05-25",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "EFEKT",
+      "rows": 7158,
+      "first_date": "1993-04-22",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "REMAK",
+      "rows": 7116,
+      "first_date": "1994-11-23",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "SYGNITY",
+      "rows": 7051,
+      "first_date": "1995-10-27",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "KETY",
+      "rows": 6996,
+      "first_date": "1996-01-30",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "ECHO",
+      "rows": 6956,
+      "first_date": "1996-03-05",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "RELPOL",
+      "rows": 6911,
+      "first_date": "1996-02-01",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "BORYSZEW",
+      "rows": 6888,
+      "first_date": "1996-05-20",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "FORTE",
+      "rows": 6867,
+      "first_date": "1996-07-24",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "LUBAWA",
+      "rows": 6678,
+      "first_date": "1996-11-18",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "COGNOR",
+      "rows": 6676,
+      "first_date": "1997-03-19",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "APATOR",
+      "rows": 6666,
+      "first_date": "1997-04-24",
+      "last_date": "2024-01-24"
+    },
+    {
+      "ticker": "HANDLOWY",
+      "rows": 6650,
+      "first_date": "1997-06-30",
+      "last_date": "2024-01-24"
+    }
+  ],
+  "bad_files_sample": []
+}
