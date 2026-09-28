@@ -76,6 +76,15 @@ def load_prices(keep: set[str]) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFram
 
     rets = close.pct_change(fill_method=None)
     outlier_returns = int((rets.abs() > 1.0).sum().sum())
+    stacked = rets.stack(dropna=True)
+    largest_abs = stacked.abs().nlargest(20)
+    largest_abs_details = []
+    for (dt, ticker), _ in largest_abs.items():
+        largest_abs_details.append({
+            "date": str(pd.Timestamp(dt).date()),
+            "ticker": str(ticker),
+            "return": float(stacked.loc[(dt, ticker)]),
+        })
 
     audit = {
         "rows_loaded": int(len(raw)),
@@ -86,6 +95,7 @@ def load_prices(keep: set[str]) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFram
         "bad_price_rows": bad_price_rows,
         "zero_or_missing_volume_rows": zero_volume_rows,
         "abs_daily_return_gt_100pct": outlier_returns,
+        "largest_abs_daily_returns": largest_abs_details,
         "note": "OHLCV has no explicit adjusted-close or dividend field; results are price-return based. WIG20 is used as price-index benchmark.",
     }
     return close, open_, volume, audit
@@ -443,6 +453,29 @@ def yearly_walkforward(r: pd.Series, start_year: int = 2015) -> dict:
     }
 
 
+def concentration_stress(r: pd.Series) -> dict:
+    r = r.dropna()
+    yearly = {}
+    for y, x in r.groupby(r.index.year):
+        yearly[str(int(y))] = float((1 + x).prod() - 1)
+
+    ex2020 = r[r.index.year != 2020]
+    recent_2021_2023 = r[(r.index >= pd.Timestamp("2021-01-01")) & (r.index <= pd.Timestamp("2023-12-31"))]
+    post_2020 = r[r.index >= pd.Timestamp("2021-01-01")]
+
+    top_year = None
+    if yearly:
+        top_year = max(yearly.items(), key=lambda kv: kv[1])
+
+    return {
+        "yearly_returns": yearly,
+        "best_year": {"year": top_year[0], "return": top_year[1]} if top_year else None,
+        "excluding_2020": metrics(ex2020),
+        "recent_2021_2023": metrics(recent_2021_2023),
+        "post_2020_through_end": metrics(post_2020),
+    }
+
+
 def block_bootstrap_mc(r: pd.Series, n_sims: int = 2000, block: int = 20) -> dict:
     x = r.dropna().values.astype(float)
     n = len(x)
@@ -573,6 +606,7 @@ def main():
             "walk_forward_years": yearly_walkforward(base),
             "statistical_validation_oos": psr_dsr(segment(base, "oos")),
             "monte_carlo_oos": block_bootstrap_mc(segment(base, "oos")),
+            "concentration_stress_oos": concentration_stress(segment(base, "oos")),
             "cost_stress_oos": {},
         }
         for cm, rr in runs.items():
