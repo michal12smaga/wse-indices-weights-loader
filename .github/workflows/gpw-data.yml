@@ -131,5 +131,7 @@ jobs:
           git config user.name "chatgpt-research-bot"
           git config user.email "actions@users.noreply.github.com"
           git add -f research_results/ research_data/gpw_data_audit.json
-          git commit -m "research: add GPW backtest results" || exit 0
+          git commit -m "research: add GPW backtest results" || true
+          git fetch origin chatgpt-gpw-research
+          git rebase origin/chatgpt-gpw-research
           git push origin HEAD:chatgpt-gpw-research
