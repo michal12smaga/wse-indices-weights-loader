@@ -76,7 +76,7 @@ def load_prices(keep: set[str]) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFram
 
     rets = close.pct_change(fill_method=None)
     outlier_returns = int((rets.abs() > 1.0).sum().sum())
-    stacked = rets.stack(dropna=True)
+    stacked = rets.stack().dropna()
     largest_abs = stacked.abs().nlargest(20)
     largest_abs_details = []
     for (dt, ticker), _ in largest_abs.items():
