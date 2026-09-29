@@ -1,0 +1,98 @@
+{
+  "capital": 10000,
+  "slot": 1000,
+  "invested": 8914.630000000001,
+  "cash_before_costs": 1085.369999999999,
+  "rows": [
+    {
+      "company": "ASBIS",
+      "symbol": "ASB.WA",
+      "current_price": 174.9,
+      "shares_for_1000_cap": 5,
+      "notional": 874.5,
+      "headroom": 125.5,
+      "market_time": 1790674710
+    },
+    {
+      "company": "Digital Network",
+      "symbol": "DIG.WA",
+      "current_price": 374.6,
+      "shares_for_1000_cap": 2,
+      "notional": 749.2,
+      "headroom": 250.79999999999995,
+      "market_time": 1790674669
+    },
+    {
+      "company": "Creotech",
+      "symbol": "CRI.WA",
+      "current_price": 784.0,
+      "shares_for_1000_cap": 1,
+      "notional": 784.0,
+      "headroom": 216.0,
+      "market_time": 1790674710
+    },
+    {
+      "company": "KGHM",
+      "symbol": "KGH.WA",
+      "current_price": 320.75,
+      "shares_for_1000_cap": 3,
+      "notional": 962.25,
+      "headroom": 37.75,
+      "market_time": 1790674707
+    },
+    {
+      "company": "XTB",
+      "symbol": "XTB.WA",
+      "current_price": 150.4,
+      "shares_for_1000_cap": 6,
+      "notional": 902.4000000000001,
+      "headroom": 97.59999999999991,
+      "market_time": 1790674705
+    },
+    {
+      "company": "Pepco",
+      "symbol": "PCO.WA",
+      "current_price": 44.93,
+      "shares_for_1000_cap": 22,
+      "notional": 988.46,
+      "headroom": 11.539999999999964,
+      "market_time": 1790674497
+    },
+    {
+      "company": "PKO BP",
+      "symbol": "PKO.WA",
+      "current_price": 123.62,
+      "shares_for_1000_cap": 8,
+      "notional": 988.96,
+      "headroom": 11.039999999999964,
+      "market_time": 1790674692
+    },
+    {
+      "company": "GPW",
+      "symbol": "GPW.WA",
+      "current_price": 98.65,
+      "shares_for_1000_cap": 10,
+      "notional": 986.5,
+      "headroom": 13.5,
+      "market_time": 1790674687
+    },
+    {
+      "company": "Orlen",
+      "symbol": "PKN.WA",
+      "current_price": 148.46,
+      "shares_for_1000_cap": 6,
+      "notional": 890.76,
+      "headroom": 109.24000000000001,
+      "market_time": 1790674681
+    },
+    {
+      "company": "Erste Bank Polska",
+      "symbol": "EBP.WA",
+      "current_price": 787.6,
+      "shares_for_1000_cap": 1,
+      "notional": 787.6,
+      "headroom": 212.39999999999998,
+      "market_time": 1790674702
+    }
+  ]
+}
