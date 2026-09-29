@@ -1,0 +1,34 @@
+name: Inspect Money WIG API
+
+on:
+  push:
+    branches: [chatgpt-gpw-research]
+    paths:
+      - ".github/workflows/inspect-money-wig.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect page state
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests,re,html as h
+          txt=requests.get("https://www.money.pl/gielda/indeksy_gpw/wig/",headers={"User-Agent":"Mozilla/5.0"},timeout=30).text
+          pats=["ASBISc Enterprises plc","indexComponents","components","constituents","notoria","indexCompanies","spolki","sg_money"]
+          for p in pats:
+              print("\n###",p)
+              for m in list(re.finditer(re.escape(p),txt,re.I))[:10]:
+                  a=max(0,m.start()-1200); b=min(len(txt),m.end()+2000)
+                  print(txt[a:b].replace("\n"," ")[:4000])
+          # URL-like API candidates
+          print("\n### API URL candidates")
+          urls=sorted(set(re.findall(r'https?[^"\\\s<>]{10,300}',txt)))
+          for u in urls:
+              if any(k in u.lower() for k in ["api","gield","quote","stock","index","notoria"]):
+                  print(h.unescape(u)[:500])
+          PY
