@@ -244,7 +244,9 @@ def build_targets(
             raise ValueError(kind)
 
         if chosen:
-            w = 1.0 / len(chosen)
+            # For capital-constrained top-N variants, each slot has a fixed 1/N cap.
+            # If fewer names qualify, residual capital remains in cash.
+            w = (1.0 / max_positions) if max_positions is not None else (1.0 / len(chosen))
             weights = {c: w for c in chosen}
         else:
             weights = {}
@@ -332,6 +334,135 @@ def simulate(
         "average_exposure": float(np.mean(exposure_obs)) if exposure_obs else 0.0,
     }
     return s, stats
+
+
+def simulate_integer_account(
+    close: pd.DataFrame,
+    targets: dict[pd.Timestamp, Target],
+    starting_capital: float = 10_000.0,
+    cost_mult: float = 1.0,
+) -> tuple[pd.Series, dict]:
+    """Whole-share, cash-aware execution at the rebalance close."""
+    idx = close.loc[START:END].index
+    cash = float(starting_capital)
+    shares: dict[str, int] = {}
+    last_price: dict[str, float] = {}
+    miss = defaultdict(int)
+    prev_equity = float(starting_capital)
+    daily = []
+    costs_pln = 0.0
+    traded_notional = 0.0
+    trade_legs = 0
+    cash_obs = []
+    positions_obs = []
+
+    for d in idx:
+        row = close.loc[d]
+
+        # Refresh marks; after 5 missing sessions apply the same conservative delisting penalty.
+        for a in list(shares):
+            p = row.get(a, np.nan)
+            if pd.notna(p) and np.isfinite(p) and float(p) > 0:
+                last_price[a] = float(p)
+                miss[a] = 0
+            else:
+                miss[a] += 1
+                if miss[a] == DELIST_MISSING_DAYS and a in last_price:
+                    liquidation = shares[a] * last_price[a] * (1.0 + DELIST_PENALTY)
+                    cash += max(0.0, liquidation)
+                    del shares[a]
+                    miss.pop(a, None)
+
+        if d in targets:
+            t = targets[d]
+            marked = {
+                a: (float(row.get(a)) if pd.notna(row.get(a, np.nan)) and np.isfinite(row.get(a, np.nan)) and float(row.get(a)) > 0
+                    else last_price.get(a, np.nan))
+                for a in set(shares) | set(t.weights)
+            }
+            equity_pre = cash + sum(shares.get(a, 0) * p for a, p in marked.items() if np.isfinite(p))
+
+            desired_qty = {}
+            for a, w in t.weights.items():
+                p = marked.get(a, np.nan)
+                if np.isfinite(p) and p > 0:
+                    desired_qty[a] = int(math.floor((equity_pre * w) / p))
+
+            # Sell down / exit first.
+            for a in list(shares):
+                p = marked.get(a, np.nan)
+                if not np.isfinite(p) or p <= 0:
+                    continue
+                target_q = desired_qty.get(a, 0)
+                if shares[a] > target_q:
+                    q = shares[a] - target_q
+                    rate = t.cost_rates.get(a, 0.0050) * cost_mult
+                    notional = q * p
+                    fee = notional * rate
+                    cash += notional - fee
+                    costs_pln += fee
+                    traded_notional += notional
+                    trade_legs += 1
+                    shares[a] -= q
+                    if shares[a] <= 0:
+                        del shares[a]
+
+            # Determine buys. If costs create a cash shortfall, reduce the largest buy one share at a time.
+            buys = {}
+            for a, tq in desired_qty.items():
+                q = max(0, tq - shares.get(a, 0))
+                if q > 0:
+                    buys[a] = q
+
+            def buy_required() -> float:
+                total = 0.0
+                for a, q in buys.items():
+                    p = marked[a]
+                    rate = t.cost_rates.get(a, 0.0050) * cost_mult
+                    total += q * p * (1.0 + rate)
+                return total
+
+            while buys and buy_required() > cash + 1e-9:
+                a = max(buys, key=lambda x: marked[x] * buys[x])
+                buys[a] -= 1
+                if buys[a] <= 0:
+                    del buys[a]
+
+            for a, q in buys.items():
+                p = marked[a]
+                rate = t.cost_rates.get(a, 0.0050) * cost_mult
+                notional = q * p
+                fee = notional * rate
+                cash -= notional + fee
+                costs_pln += fee
+                traded_notional += notional
+                trade_legs += 1
+                shares[a] = shares.get(a, 0) + q
+                last_price[a] = p
+
+        equity = cash
+        for a, q in shares.items():
+            p = row.get(a, np.nan)
+            mark = float(p) if pd.notna(p) and np.isfinite(p) and float(p) > 0 else last_price.get(a, np.nan)
+            if np.isfinite(mark):
+                equity += q * mark
+
+        r = equity / prev_equity - 1.0 if prev_equity > 0 else 0.0
+        daily.append(r)
+        prev_equity = equity
+        cash_obs.append(cash / equity if equity > 0 else 1.0)
+        positions_obs.append(len(shares))
+
+    return pd.Series(daily, index=idx, name="return"), {
+        "starting_capital_pln": starting_capital,
+        "ending_equity_pln": float(prev_equity),
+        "costs_paid_pln": float(costs_pln),
+        "traded_notional_pln": float(traded_notional),
+        "trade_legs": int(trade_legs),
+        "average_cash_fraction": float(np.mean(cash_obs)) if cash_obs else 1.0,
+        "average_positions": float(np.mean(positions_obs)) if positions_obs else 0.0,
+        "max_positions_observed": int(max(positions_obs)) if positions_obs else 0,
+    }
 
 
 def max_drawdown_stats(r: pd.Series) -> tuple[float, float, int]:
@@ -707,7 +838,7 @@ def main():
     report["capital_10k_experiment"] = {
         "starting_capital_pln": 10_000,
         "selection_rule": "SMA200 + positive 12M return; among qualifiers rank by 12M return and hold top N equal-weight",
-        "note": "Fractional portfolio accounting is still used; whole-share rounding and broker-specific minimum commissions are not yet modeled.",
+        "note": "Whole-share rounding and residual cash are modeled in a separate account simulation. Broker-specific minimum ticket commissions are not separately modeled; the existing all-in ADV cost rates are applied to traded notional.",
         "variants": [],
     }
     for npos in [5, 8, 10]:
@@ -715,14 +846,20 @@ def main():
             f"trend_top{npos}", "trend", close, volume, universe,
             mom_lb=252, sma=200, max_positions=npos
         )
+        integer_r, integer_stats = simulate_integer_account(close, t, starting_capital=10_000, cost_mult=1.0)
+        integer_r2, integer_stats2 = simulate_integer_account(close, t, starting_capital=10_000, cost_mult=2.0)
         report["capital_10k_experiment"]["variants"].append({
             "max_positions": npos,
             "target_position_pln_at_start": 10_000 / npos,
             "holding_stats": target_holding_stats(t),
-            "oos": metrics(segment(runs[1.0], "oos"), segment(benchmark, "oos")),
-            "oos_2x_cost": metrics(segment(runs[2.0], "oos"), segment(benchmark, "oos")),
-            "execution_stats": ex[1.0],
-            "concentration_stress_oos": concentration_stress(segment(runs[1.0], "oos")),
+            "oos_fractional": metrics(segment(runs[1.0], "oos"), segment(benchmark, "oos")),
+            "oos_fractional_2x_cost": metrics(segment(runs[2.0], "oos"), segment(benchmark, "oos")),
+            "whole_share_account_oos": metrics(segment(integer_r, "oos"), segment(benchmark, "oos")),
+            "whole_share_account_stats_full_sample": integer_stats,
+            "whole_share_account_oos_2x_cost": metrics(segment(integer_r2, "oos"), segment(benchmark, "oos")),
+            "whole_share_account_stats_full_sample_2x_cost": integer_stats2,
+            "execution_stats_fractional": ex[1.0],
+            "concentration_stress_oos_fractional": concentration_stress(segment(runs[1.0], "oos")),
         })
 
     # Correlations, drawdown correlations, and equal-weight strategy portfolio for non-benchmark strategies.
