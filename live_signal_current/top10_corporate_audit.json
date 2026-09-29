@@ -1,0 +1,82 @@
+[
+  {
+    "company": "ASBISc Enterprises plc",
+    "symbol": "ASB.WA",
+    "max_abs_daily_return": 0.09567081791109522,
+    "max_jump_date": "2026-02-23",
+    "split_events": {},
+    "dividend_event_count": 2
+  },
+  {
+    "company": "Digital Network SA",
+    "symbol": "DIG.WA",
+    "max_abs_daily_return": 0.12432435181763801,
+    "max_jump_date": "2025-11-24",
+    "split_events": {},
+    "dividend_event_count": 2
+  },
+  {
+    "company": "Creotech Instruments SA",
+    "symbol": "CRI.WA",
+    "max_abs_daily_return": -0.2180349932705249,
+    "max_jump_date": "2026-04-07",
+    "split_events": {},
+    "dividend_event_count": 0
+  },
+  {
+    "company": "KGHM Polska Miedź SA",
+    "symbol": "KGH.WA",
+    "max_abs_daily_return": -0.10701798452851485,
+    "max_jump_date": "2026-01-30",
+    "split_events": {},
+    "dividend_event_count": 1
+  },
+  {
+    "company": "XTB SA",
+    "symbol": "XTB.WA",
+    "max_abs_daily_return": 0.11725956978860341,
+    "max_jump_date": "2026-01-30",
+    "split_events": {},
+    "dividend_event_count": 2
+  },
+  {
+    "company": "Pepco Group NV",
+    "symbol": "PCO.WA",
+    "max_abs_daily_return": 0.13768439017240564,
+    "max_jump_date": "2025-09-25",
+    "split_events": {},
+    "dividend_event_count": 1
+  },
+  {
+    "company": "PKO BP SA",
+    "symbol": "PKO.WA",
+    "max_abs_daily_return": -0.12228323531161578,
+    "max_jump_date": "2025-08-22",
+    "split_events": {},
+    "dividend_event_count": 2
+  },
+  {
+    "company": "GPW SA",
+    "symbol": "GPW.WA",
+    "max_abs_daily_return": 0.08338985119835796,
+    "max_jump_date": "2026-02-18",
+    "split_events": {},
+    "dividend_event_count": 2
+  },
+  {
+    "company": "Orlen SA",
+    "symbol": "PKN.WA",
+    "max_abs_daily_return": -0.07858320912227157,
+    "max_jump_date": "2025-08-13",
+    "split_events": {},
+    "dividend_event_count": 2
+  },
+  {
+    "company": "Erste Bank Polska SA",
+    "symbol": "EBP.WA",
+    "max_abs_daily_return": -0.09055744985941061,
+    "max_jump_date": "2026-05-12",
+    "split_events": {},
+    "dividend_event_count": 1
+  }
+]
