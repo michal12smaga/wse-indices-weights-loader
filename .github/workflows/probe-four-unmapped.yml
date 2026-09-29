@@ -1,0 +1,42 @@
+name: Probe four unmapped WIG symbols
+
+on:
+  push:
+    branches: [chatgpt-gpw-research]
+    paths:
+      - ".github/workflows/probe-four-unmapped.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe Yahoo symbols
+        shell: bash
+        run: |
+          python - <<'PY'
+          import requests, json
+          guesses={
+            "GreenX":["GRX.WA","GRX.AX"],
+            "KRKA":["KRK.WA","KRKG.L"],
+            "MOL":["MOL.WA","MOL.BD"],
+            "Plaza":["PLZ.WA","PLAZA.WA"]
+          }
+          s=requests.Session(); s.headers.update({"User-Agent":"Mozilla/5.0"})
+          for name,syms in guesses.items():
+              for sym in syms:
+                  try:
+                      r=s.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}",
+                          params={"range":"2y","interval":"1d"},timeout=15)
+                      ok=r.ok and r.json().get("chart",{}).get("result")
+                      if ok:
+                          m=r.json()["chart"]["result"][0]["meta"]
+                          print("OK",name,sym,m.get("exchangeName"),m.get("currency"),m.get("regularMarketPrice"),
+                                len(r.json()["chart"]["result"][0].get("timestamp") or []))
+                      else:
+                          print("NO",name,sym,r.status_code)
+                  except Exception as e:
+                      print("ERR",name,sym,repr(e))
+          PY
