@@ -1,0 +1,47 @@
+name: Probe current WIG table
+
+on:
+  push:
+    branches: [chatgpt-gpw-research]
+    paths:
+      - ".github/workflows/probe-current-wig.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Money.pl current WIG table
+        shell: bash
+        run: |
+          pip install pandas lxml beautifulsoup4 requests
+          python - <<'PY'
+          import requests, pandas as pd
+          from bs4 import BeautifulSoup
+          url="https://www.money.pl/gielda/indeksy_gpw/wig/"
+          h={"User-Agent":"Mozilla/5.0"}
+          r=requests.get(url,headers=h,timeout=30)
+          print("STATUS",r.status_code,"BYTES",len(r.content),r.url)
+          open("/tmp/wig.html","wb").write(r.content)
+          print(r.text[:1000])
+          try:
+              tables=pd.read_html(r.text)
+              print("TABLES",len(tables))
+              for i,t in enumerate(tables):
+                  print("TABLE",i,t.shape,list(t.columns))
+                  print(t.head(20).to_string())
+          except Exception as e:
+              print("READ_HTML_ERR",repr(e))
+          soup=BeautifulSoup(r.text,"html.parser")
+          pairs=[]
+          for a in soup.find_all("a",href=True):
+              txt=" ".join(a.stripped_strings)
+              href=a["href"]
+              if txt and ("gielda" in href or "notowania" in href):
+                  pairs.append((txt,href))
+          print("LINKS",len(pairs))
+          for x in pairs[:300]:
+              print("A",repr(x[0]),x[1])
+          PY
