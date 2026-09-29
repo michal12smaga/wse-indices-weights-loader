@@ -1,0 +1,217 @@
+name: Build live GPW Top10 signal
+
+on:
+  push:
+    branches: [chatgpt-gpw-research]
+    paths:
+      - ".github/workflows/live-top10.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  signal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt-gpw-research
+
+      - name: Install dependencies
+        run: pip install -e . pandas requests beautifulsoup4
+
+      - name: Discover latest WIG composition and build Yahoo mapping
+        shell: bash
+        run: |
+          mkdir -p live_signal
+          PYTHONPATH=src python - <<'PY'
+          import json, os, time, requests
+          import pandas as pd
+          from pathlib import Path
+          from pdf_downloader import PDFDownloader
+          from pdf_parser import PDFParser
+
+          OUT=Path("live_signal")
+          sess=requests.Session()
+          sess.headers.update({"User-Agent":"Mozilla/5.0"})
+
+          dl=PDFDownloader(str(OUT/"pdf"))
+          allp=dl.discover_all_pdfs()
+          dates=sorted(allp)
+          if not dates:
+              raise RuntimeError("No GPW Benchmark PDF dates discovered")
+          print("LATEST_DISCOVERED_DATES", dates[-10:])
+
+          wig_records=None
+          used_date=None
+          # Try newest dates backwards until a WIG PDF parses.
+          for d in reversed(dates[-20:]):
+              urls=[u for u in allp[d] if os.path.basename(u).lower().endswith("_wig.pdf")]
+              if not urls:
+                  continue
+              print("TRY_WIG",d,urls[0])
+              p=dl.download_pdf(urls[0])
+              if not p:
+                  continue
+              recs=PDFParser().parse_pdf(p)
+              recs=[r for r in recs if str(r.index_name).upper()=="WIG"]
+              if recs:
+                  wig_records=recs
+                  used_date=d
+                  break
+
+          if not wig_records:
+              raise RuntimeError("Could not parse a recent WIG portfolio")
+
+          members=[]
+          for r in wig_records:
+              members.append({
+                  "date":used_date.replace("_","-"),
+                  "isin":r.isin,
+                  "company_name":r.company_name,
+                  "price_pdf":r.price_pln,
+                  "weight_pct":r.share_percent,
+              })
+          pd.DataFrame(members).to_csv(OUT/"wig_members.csv",index=False)
+          print("WIG_DATE",used_date,"MEMBERS",len(members))
+
+          # Yahoo symbol mapping: ISIN first; company name fallback.
+          mappings=[]
+          for i,m in enumerate(members,1):
+              candidates=[]
+              for q in [m["isin"], m["company_name"]]:
+                  try:
+                      rr=sess.get("https://query1.finance.yahoo.com/v1/finance/search",
+                                  params={"q":q,"quotesCount":10,"newsCount":0},
+                                  timeout=20)
+                      if rr.ok:
+                          for x in rr.json().get("quotes",[]):
+                              if x.get("exchange") in ("WSE","WSE International Order Book") or str(x.get("symbol","")).endswith(".WA"):
+                                  candidates.append(x)
+                      if candidates:
+                          break
+                  except Exception as e:
+                      print("SEARCH_ERR",m["company_name"],q,repr(e))
+                  time.sleep(0.05)
+
+              # Prefer Warsaw .WA equity and exact ISIN/name hints.
+              candidates=[x for x in candidates if str(x.get("symbol","")).endswith(".WA")]
+              best=candidates[0] if candidates else {}
+              mappings.append({
+                  **m,
+                  "yahoo_symbol":best.get("symbol"),
+                  "yahoo_name":best.get("longname") or best.get("shortname"),
+              })
+              if i%50==0:
+                  print("MAPPED",i,"/",len(members))
+              time.sleep(0.08)
+
+          mp=pd.DataFrame(mappings)
+          mp.to_csv(OUT/"wig_yahoo_mapping.csv",index=False)
+          print("MAPPING_OK",mp["yahoo_symbol"].notna().sum(),"OF",len(mp))
+          print(mp[mp["yahoo_symbol"].isna()][["company_name","isin"]].head(50).to_string(index=False))
+          PY
+
+      - name: Download daily history and compute frozen Top10
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, math, time, requests
+          import pandas as pd
+          import numpy as np
+          from pathlib import Path
+          from datetime import datetime, timezone
+
+          OUT=Path("live_signal")
+          mp=pd.read_csv(OUT/"wig_yahoo_mapping.csv")
+          sess=requests.Session()
+          sess.headers.update({"User-Agent":"Mozilla/5.0"})
+
+          # Frozen signal date: last completed Warsaw session, 2026-09-28.
+          signal_date=pd.Timestamp("2026-09-28")
+          p1=int(pd.Timestamp("2025-06-01",tz="UTC").timestamp())
+          p2=int(pd.Timestamp("2026-09-29",tz="UTC").timestamp())
+
+          rows=[]
+          histories={}
+          for i,r in mp.dropna(subset=["yahoo_symbol"]).iterrows():
+              sym=r["yahoo_symbol"]
+              try:
+                  u=f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
+                  rr=sess.get(u,params={
+                      "period1":p1,"period2":p2,"interval":"1d",
+                      "events":"div,splits","includeAdjustedClose":"true"
+                  },timeout=25)
+                  rr.raise_for_status()
+                  obj=rr.json()["chart"]["result"][0]
+                  ts=obj.get("timestamp") or []
+                  q=obj["indicators"]["quote"][0]
+                  adj=(obj["indicators"].get("adjclose") or [{}])[0].get("adjclose")
+                  data=pd.DataFrame({
+                      "date":pd.to_datetime(ts,unit="s",utc=True).tz_convert("Europe/Warsaw").normalize().tz_localize(None),
+                      "close":q.get("close"),
+                      "volume":q.get("volume"),
+                      "adjclose":adj if adj is not None else q.get("close"),
+                  }).drop_duplicates("date").set_index("date").sort_index()
+                  data=data.loc[:signal_date].dropna(subset=["close"])
+                  histories[sym]=data
+                  if len(data)<253:
+                      continue
+                  px=float(data["close"].iloc[-1])
+                  sma200=float(data["close"].tail(200).mean())
+                  # Frozen backtest used raw close, not adjusted close, so preserve it for signal comparability.
+                  mom12=float(data["close"].iloc[-1]/data["close"].iloc[-253]-1)
+                  adv60=float((data["close"].tail(60)*data["volume"].tail(60)).median())
+                  last_date=str(data.index[-1].date())
+                  rows.append({
+                      "company_name":r["company_name"],"isin":r["isin"],"symbol":sym,
+                      "date":last_date,"close":px,"sma200":sma200,"mom12":mom12,"adv60_pln":adv60,
+                      "trend_ok":bool(px>sma200 and mom12>0 and adv60>=1_000_000),
+                      "wig_weight_pct":r["weight_pct"],
+                  })
+              except Exception as e:
+                  print("PRICE_ERR",sym,r["company_name"],repr(e))
+              time.sleep(0.06)
+
+          sc=pd.DataFrame(rows)
+          sc.to_csv(OUT/"live_screen.csv",index=False)
+          elig=sc[sc["trend_ok"]].sort_values("mom12",ascending=False).head(10).copy()
+
+          # Fixed 10% slots, whole shares; unfilled part remains cash.
+          capital=10_000.0
+          slot=capital/10
+          elig["target_pln"]=slot
+          elig["shares"]=(slot/elig["close"]).apply(math.floor).astype(int)
+          elig["notional_pln"]=elig["shares"]*elig["close"]
+          elig["cash_from_rounding"]=slot-elig["notional_pln"]
+          invested=float(elig["notional_pln"].sum())
+          result={
+              "signal_date":"2026-09-28",
+              "universe_date":str(mp["date"].iloc[0]),
+              "mapped_members":int(mp["yahoo_symbol"].notna().sum()),
+              "screened_with_253_days":int(len(sc)),
+              "eligible_count":int(sc["trend_ok"].sum()),
+              "selected_count":int(len(elig)),
+              "starting_capital_pln":capital,
+              "slot_pln":slot,
+              "invested_before_costs_pln":invested,
+              "cash_before_costs_pln":capital-invested,
+              "selected":elig.to_dict(orient="records"),
+          }
+          with open(OUT/"top10_signal.json","w",encoding="utf-8") as f:
+              json.dump(result,f,indent=2,ensure_ascii=False)
+          elig.to_csv(OUT/"top10_orders.csv",index=False)
+          print(json.dumps(result,indent=2,ensure_ascii=False))
+          PY
+
+      - name: Commit live signal
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name "chatgpt-research-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -f live_signal/
+          git commit -m "research: add live Top10 GPW signal for 2026-09-28" || true
+          git fetch origin chatgpt-gpw-research
+          git rebase origin/chatgpt-gpw-research
+          git push origin HEAD:chatgpt-gpw-research
