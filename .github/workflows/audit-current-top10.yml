@@ -1,0 +1,65 @@
+name: Audit current Top10 corporate actions
+
+on:
+  push:
+    branches: [chatgpt-gpw-research]
+    paths:
+      - ".github/workflows/audit-current-top10.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt-gpw-research
+      - name: Audit Yahoo events and raw jumps
+        shell: bash
+        run: |
+          pip install pandas requests
+          python - <<'PY'
+          import json, requests, pandas as pd, numpy as np
+          from pathlib import Path
+          p=Path("live_signal_current/current_live_screen.csv")
+          df=pd.read_csv(p)
+          eligible=df[df.trend_ok].sort_values("mom12",ascending=False)
+          # BDF excluded due known capital actions, inspect next 10.
+          picks=eligible[eligible.symbol!="BDF.WA"].head(10)
+          sess=requests.Session(); sess.headers.update({"User-Agent":"Mozilla/5.0"})
+          p1=int(pd.Timestamp("2025-06-01",tz="UTC").timestamp())
+          p2=int(pd.Timestamp("2026-09-29",tz="UTC").timestamp())
+          audit=[]
+          for _,r in picks.iterrows():
+              rr=sess.get(f"https://query1.finance.yahoo.com/v8/finance/chart/{r.symbol}",
+                  params={"period1":p1,"period2":p2,"interval":"1d","events":"div,splits","includeAdjustedClose":"true"},
+                  timeout=30)
+              obj=rr.json()["chart"]["result"][0]
+              ts=obj.get("timestamp") or []
+              q=obj["indicators"]["quote"][0]
+              d=pd.DataFrame({"date":pd.to_datetime(ts,unit="s",utc=True),"close":q.get("close")}).dropna()
+              d["ret"]=d.close.pct_change(fill_method=None)
+              m=d.loc[d.ret.abs().idxmax()] if d.ret.notna().any() else None
+              ev=obj.get("events") or {}
+              audit.append({
+                  "company":r.company_name,"symbol":r.symbol,
+                  "max_abs_daily_return":float(m.ret) if m is not None else None,
+                  "max_jump_date":str(m.date.date()) if m is not None else None,
+                  "split_events":ev.get("splits",{}),
+                  "dividend_event_count":len(ev.get("dividends",{})),
+              })
+          Path("live_signal_current/top10_corporate_audit.json").write_text(json.dumps(audit,indent=2,ensure_ascii=False))
+          print(json.dumps(audit,indent=2,ensure_ascii=False))
+          PY
+      - name: Commit audit
+        shell: bash
+        run: |
+          git config user.name "chatgpt-research-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -f live_signal_current/top10_corporate_audit.json
+          git commit -m "research: audit current Top10 corporate actions" || true
+          git fetch origin chatgpt-gpw-research
+          git rebase origin/chatgpt-gpw-research
+          git push origin HEAD:chatgpt-gpw-research
