@@ -1,0 +1,65 @@
+name: Probe live GPW feeds
+
+on:
+  push:
+    branches: [chatgpt-gpw-research]
+    paths:
+      - ".github/workflows/probe-live-feeds.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe Yahoo and Stooq
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          echo "=== Yahoo search ==="
+          curl -L --fail --max-time 30 -A "Mozilla/5.0"             "https://query1.finance.yahoo.com/v1/finance/search?q=PKO%20BP&quotesCount=5&newsCount=0"             -o /tmp/ysearch.json || true
+          head -c 1000 /tmp/ysearch.json || true
+          echo
+
+          echo "=== Yahoo chart ==="
+          curl -L --fail --max-time 30 -A "Mozilla/5.0"             "https://query1.finance.yahoo.com/v8/finance/chart/PKO.WA?period1=1727568000&period2=1790630400&interval=1d&events=div%2Csplits"             -o /tmp/ychart.json || true
+          head -c 800 /tmp/ychart.json || true
+          echo
+
+          echo "=== Stooq challenge solve ==="
+          rm -f /tmp/cj /tmp/stooq.html /tmp/pko.csv
+          curl -L --max-time 30 -A "Mozilla/5.0" -c /tmp/cj -b /tmp/cj             "https://stooq.pl/q/d/l/?s=pko.pl&i=d&d1=20250901&d2=20260929"             -o /tmp/stooq.html
+          python - <<'PY'
+          import re, hashlib, subprocess, urllib.parse
+          txt=open('/tmp/stooq.html',encoding='utf-8',errors='ignore').read()
+          m=re.search(r'const c="([^"]+)",d=(\d+)',txt)
+          if not m:
+              print("NO_CHALLENGE", txt[:200])
+              raise SystemExit(0)
+          c=m.group(1); d=int(m.group(2)); target='0'*d
+          n=0
+          while True:
+              if hashlib.sha256((c+str(n)).encode()).hexdigest().startswith(target):
+                  break
+              n+=1
+          print("SOLVED", c, d, n)
+          data=urllib.parse.urlencode({'c':c,'n':n})
+          subprocess.run([
+              'curl','-L','--fail','--max-time','30','-A','Mozilla/5.0',
+              '-c','/tmp/cj','-b','/tmp/cj',
+              '-H','Content-Type: application/x-www-form-urlencoded',
+              '--data',data,'https://stooq.pl/__verify'
+          ],check=True)
+          PY
+          curl -L --fail --max-time 30 -A "Mozilla/5.0" -c /tmp/cj -b /tmp/cj             "https://stooq.pl/q/d/l/?s=pko.pl&i=d&d1=20250901&d2=20260929"             -o /tmp/pko.csv || true
+          file /tmp/pko.csv || true
+          head -5 /tmp/pko.csv || true
+          tail -5 /tmp/pko.csv || true
+
+          echo "=== Stooq bulk ==="
+          curl -L --max-time 60 -A "Mozilla/5.0" -c /tmp/cj -b /tmp/cj             "https://stooq.pl/db/h/d_pl_txt.zip"             -o /tmp/d_pl_txt.zip || true
+          file /tmp/d_pl_txt.zip || true
+          ls -lh /tmp/d_pl_txt.zip || true
+          unzip -l /tmp/d_pl_txt.zip | head -20 || true
